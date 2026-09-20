@@ -1,24 +1,31 @@
 import os
 import dj_database_url
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load environment variables from .env (sits next to manage.py)
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # ==================== CREATE REQUIRED DIRECTORIES ====================
-# Create saved_applications directory if it doesn't exist (for storing submitted applications)
 SAVED_APPLICATIONS_DIR = BASE_DIR / 'saved_applications'
 os.makedirs(SAVED_APPLICATIONS_DIR, exist_ok=True)
 
 # ==================== SECURITY ====================
 SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-&z+ca)$#0^a(l^nve5dhf0y*8c32om^-$ey#oij06cst@1cpy8')
-DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'  # Changed to False by default
+DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
-# ALLOWED_HOSTS - critical for Render (NO SPACES)
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1,ice-foundation-1.onrender.com,.vercel.app,dsuvamshieducare.org,www.dsuvamshieducare.org').split(',')
+ALLOWED_HOSTS = os.environ.get(
+    'ALLOWED_HOSTS',
+    'localhost,127.0.0.1,10.134.88.244,dsuvamshieducare.org,www.dsuvamshieducare.org,.vercel.app'
+).split(',')
 
-# CSRF settings for Render - Includes ice-foundation-1 and dsuvamshieducare.org
-CSRF_TRUSTED_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', 'https://ice-foundation-1.onrender.com,https://*.vercel.app,https://dsuvamshieducare.org,https://www.dsuvamshieducare.org,http://localhost:5173,http://localhost:3000').split(',')
+CSRF_TRUSTED_ORIGINS = os.environ.get(
+    'CSRF_TRUSTED_ORIGINS',
+    'https://dsuvamshieducare.org,https://www.dsuvamshieducare.org,https://*.vercel.app,http://localhost:5173,http://localhost:3000'
+).split(',')
 
 # ==================== APPLICATION DEFINITION ====================
 INSTALLED_APPS = [
@@ -33,13 +40,13 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework.authtoken',
     'corsheaders',
-    'anymail',  # Keep this for Resend
-    'backend',  # Your main app
-    'colleges',  # College app
+    'anymail',
+    'backend',
+    'colleges',
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',  # Must be at the top
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -70,67 +77,58 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'backend.wsgi.application'
 
-# ==================== DATABASE - FIXED FOR RENDER ====================
-# Try to get database URLs from environment variables
-RENDER_INTERNAL_DATABASE_URL = os.environ.get('RENDER_INTERNAL_DATABASE_URL')
-RENDER_EXTERNAL_DATABASE_URL = os.environ.get('RENDER_EXTERNAL_DATABASE_URL')
-DATABASE_URL = RENDER_INTERNAL_DATABASE_URL or RENDER_EXTERNAL_DATABASE_URL or os.environ.get('DATABASE_URL')
+# ==================== DATABASE - SELF-HOSTED ON DELL/UBUNTU SERVER ====================
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
-    # Check if using internal connection (no SSL needed)
-    using_internal = bool(RENDER_INTERNAL_DATABASE_URL and DATABASE_URL == RENDER_INTERNAL_DATABASE_URL)
-    
-    # Parse the database URL
     db_config = dj_database_url.parse(DATABASE_URL, conn_max_age=600, conn_health_checks=True)
-    
-    # Configure SSL properly for Render's PostgreSQL
-    if not using_internal:
-        # For external connections, SSL is required
-        db_config['OPTIONS'] = {
-            'sslmode': 'require',
-            'connect_timeout': 10,
-        }
-        print(f"🔌 Using external PostgreSQL: {db_config.get('HOST', 'unknown')} (SSL required)")
-    else:
-        # Internal connections work without SSL
-        db_config['OPTIONS'] = {
-            'connect_timeout': 10,
-        }
-        print(f"🔌 Using internal PostgreSQL: {db_config.get('HOST', 'unknown')} (no SSL needed)")
-    
+    db_config['OPTIONS'] = {
+        'connect_timeout': 10,
+    }
     DATABASES = {
         'default': db_config
     }
-    
-    # Override connection age if specified
+    print(f"Using self-hosted PostgreSQL: {db_config.get('HOST', 'unknown')}")
+
     conn_max_age = os.environ.get('DB_CONN_MAX_AGE')
     if conn_max_age:
         DATABASES['default']['CONN_MAX_AGE'] = int(conn_max_age)
-    
-    # Test connection on startup (helpful for debugging)
+
     try:
         from django.db import connections
         connections['default'].cursor()
-        print("✅ Database connection successful!")
+        print("Database connection successful!")
     except Exception as e:
-        print(f"⚠️ Database connection test failed: {e}")
-        print("   This might be normal during initial build. Continuing...")
+        print(f"Database connection test failed: {e}")
+
+elif os.environ.get('DB_NAME'):
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.environ.get('DB_NAME'),
+            'USER': os.environ.get('DB_USER'),
+            'PASSWORD': os.environ.get('DB_PASSWORD'),
+            'HOST': os.environ.get('DB_HOST', 'localhost'),
+            'PORT': os.environ.get('DB_PORT', '5432'),
+            'OPTIONS': {
+                'connect_timeout': 10,
+            },
+        }
+    }
+    print(f"Using self-hosted PostgreSQL via DB_* env vars: {os.environ.get('DB_HOST', 'localhost')}")
+
 else:
-    # Fallback to SQLite for local development
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
             'NAME': str(BASE_DIR / 'db.sqlite3'),
         }
     }
-    print("📦 Using SQLite database for development")
+    print("Using SQLite database for development")
 
 # ==================== CORS SETTINGS ====================
-# Allow all origins only in development by default; allow overriding with env var
-# Set environment variable CORS_ALLOW_ALL_ORIGINS=True to enable in production (use carefully)
 CORS_ALLOW_ALL_ORIGINS = os.environ.get('CORS_ALLOW_ALL_ORIGINS', str(DEBUG)).lower() == 'true'
 
-# Explicitly allowed origins
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://localhost:5173",
@@ -144,25 +142,19 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "https://dsuvamshieducare.org",
     "https://www.dsuvamshieducare.org",
-    "https://ice-foundation-1.onrender.com", 
 ]
 
-# Add any CORS origins from environment variable
 env_cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', '')
 if env_cors_origins:
     CORS_ALLOWED_ORIGINS.extend([origin.strip() for origin in env_cors_origins.split(',') if origin.strip()])
 
-# Allow ice-foundation-1 and other Render.com subdomains via regex
 CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^https://ice-foundation-1\.onrender\.com$",
     r"^https://.*\.vercel\.app$",
     r"^https://(www\.)?dsuvamshieducare\.org$",
 ]
 
-# Allow credentials (cookies, authorization headers)
 CORS_ALLOW_CREDENTIALS = True
 
-# Allowed methods
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -172,7 +164,6 @@ CORS_ALLOW_METHODS = [
     'PUT',
 ]
 
-# Allowed headers
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -213,7 +204,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # ==================== INTERNATIONALIZATION ====================
 LANGUAGE_CODE = 'en-us'
-TIME_ZONE = 'Asia/Kolkata'  # IST
+TIME_ZONE = 'Asia/Kolkata'
 USE_I18N = True
 USE_TZ = True
 
@@ -222,7 +213,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = str(BASE_DIR / 'staticfiles')
 
 STATICFILES_DIRS = [
-    str(BASE_DIR / 'static'),  # This points to your static folder at the project root
+    str(BASE_DIR / 'static'),
 ]
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
@@ -230,11 +221,9 @@ MEDIA_URL = '/media/'
 MEDIA_ROOT = str(BASE_DIR / 'media')
 
 # ==================== FILE UPLOAD SETTINGS ====================
-# Maximum file size for uploads (5MB)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB in bytes
-FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024  # 5MB in bytes
+DATA_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 5 * 1024 * 1024
 
-# Allowed file extensions for uploads
 ALLOWED_DOCUMENT_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png']
 
 # ==================== SECURITY SETTINGS (Production) ====================
@@ -246,40 +235,32 @@ if not DEBUG:
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
-    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
 
 if DEBUG:
-    # Use console email backend for development
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-    print("📧 Using console email backend (development)")
+    print("Using console email backend (development)")
 else:
-    # Use Resend for production (via django-anymail)
     EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
-    
-    # Resend configuration
     ANYMAIL = {
         "RESEND_API_KEY": os.environ.get("RESEND_API_KEY"),
-        # Optional: Add webhook signing secret if you're using webhooks
-        # "RESEND_SIGNING_SECRET": os.environ.get("RESEND_SIGNING_SECRET"),
     }
-    
-    print("📧 Using Resend email provider (production)")
+    print("Using Resend email provider (production)")
 
-# ✅ Define RESEND_API_KEY from environment variable
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY")
 
-# Default from email - must be a verified domain in Resend for production
 DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'VAMSHI EDUCARE <noreply@dsuvamshieducare.org>')
 SERVER_EMAIL = os.environ.get('SERVER_EMAIL', DEFAULT_FROM_EMAIL)
 
-# Frontend URL for email links
+STAFF_NOTIFICATION_EMAIL = os.environ.get('STAFF_NOTIFICATION_EMAIL', 'gokulece303@gmail.com')
+
 FRONTEND_URL = os.environ.get('FRONTEND_URL', 'https://dsuvamshieducare.org')
 
-# ✅ Now this check will work
 if not DEBUG and not RESEND_API_KEY:
-    print("⚠️ WARNING: RESEND_API_KEY not set! Email sending will fail.")
+    print("WARNING: RESEND_API_KEY not set! Email sending will fail.")
+
 # ==================== LOGGING ====================
 LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'INFO')
 
@@ -314,7 +295,7 @@ LOGGING = {
         },
         'django.db.backends': {
             'handlers': ['console'],
-            'level': 'ERROR',  # Change to 'DEBUG' to see SQL queries
+            'level': 'ERROR',
             'propagate': False,
         },
         'colleges': {
@@ -331,27 +312,26 @@ LOGGING = {
 }
 
 # ==================== AUTO SUPERUSER CREATION ====================
-# Run on Render in production or when DATABASE_URL is set
 if os.environ.get('DATABASE_URL') and os.environ.get('DJANGO_SUPERUSER_USERNAME'):
     try:
         from django.contrib.auth import get_user_model
         User = get_user_model()
-        
+
         username = os.environ.get('DJANGO_SUPERUSER_USERNAME', 'admin')
         email = os.environ.get('DJANGO_SUPERUSER_EMAIL', 'admin@example.com')
-        password = os.environ.get('DJANGO_SUPERUSER_PASSWORD')
-        
+        password = os.environ.get('DJANGO_SUPERUSER_PASSWORD', 'Gokul@123')
+
         if password and not User.objects.filter(username=username).exists():
             User.objects.create_superuser(username=username, email=email, password=password)
-            print(f"✅ Superuser '{username}' created successfully!")
+            print(f"Superuser '{username}' created successfully!")
         elif not password:
-            print("⚠️ DJANGO_SUPERUSER_PASSWORD not set, skipping superuser creation")
+            print("DJANGO_SUPERUSER_PASSWORD not set, skipping superuser creation")
         else:
-            print(f"ℹ️ Superuser '{username}' already exists")
+            print(f"Superuser '{username}' already exists")
     except Exception as e:
-        print(f"⚠️ Could not create superuser: {e}")
+        print(f"Could not create superuser: {e}")
 
 # ==================== DEFAULT PRIMARY KEY FIELD ====================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-print(f"🚀 Django running in {'DEVELOPMENT' if DEBUG else 'PRODUCTION'} mode")
+print(f"Django running in {'DEVELOPMENT' if DEBUG else 'PRODUCTION'} mode")

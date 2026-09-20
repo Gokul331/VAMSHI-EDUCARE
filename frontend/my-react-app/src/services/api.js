@@ -2,7 +2,7 @@ import axios from "axios";
 import collegesData from "../data/colleges.json";
 import coursesData from "../data/courses.json";
 
-const API_URL = "https://ice-foundation-1.onrender.com";
+const API_URL = "http://10.134.88.244:8000";
 
 const API = axios.create({
   baseURL: `${API_URL}/api`,
