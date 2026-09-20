@@ -560,6 +560,26 @@ function ApplicationForm() {
       return;
     }
 
+    // Numeric guards — prevent NaN / invalid IDs from ever reaching the API.
+    // parseInt() on an empty or non-numeric selection returns NaN, and NaN
+    // can end up serialized as the literal string "NaN" depending on how
+    // the request body is built, which the backend then can't parse as
+    // a real integer (Field 'course_id' expected a number but got 'NaN').
+    const parsedCollegeId = parseInt(selectedCollege, 10);
+    const parsedCourseId = parseInt(selectedCourse, 10);
+
+    if (Number.isNaN(parsedCollegeId)) {
+      setError('Please select a valid college before submitting');
+      setLoading(false);
+      return;
+    }
+
+    if (Number.isNaN(parsedCourseId)) {
+      setError('Please select a valid course before submitting');
+      setLoading(false);
+      return;
+    }
+
     const submitData = {
       first_name: formData.first_name,
       last_name: formData.last_name || '',
@@ -577,9 +597,9 @@ function ApplicationForm() {
       pincode: formData.pincode,
       course_name: selectedCourseName,
       department_name: selectedDepartment,
-      college_id: parseInt(selectedCollege),
-      college: parseInt(selectedCollege),
-      selected_course_id: parseInt(selectedCourse),
+      college_id: parsedCollegeId,
+      college: parsedCollegeId,
+      selected_course_id: parsedCourseId,
       selected_category: selectedCategory,
       selected_degree_type: selectedDegreeType,
       gender: formData.gender,
