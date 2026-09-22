@@ -56,6 +56,24 @@ const SuccessIconWithBurst = () => {
   );
 };
 
+// ---- Course ID helpers ----
+// The backend returns the course identifier as either `id` or `course_id`
+// depending on which endpoint is used. These helpers resolve it safely
+// and reject the literal strings "undefined" / "null" / "NaN".
+const resolveCourseId = (course) => {
+  if (!course) return null;
+  const raw = course.id ?? course.course_id ?? null;
+  if (raw === null || raw === undefined) return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+};
+
+const isValidCourseValue = (value) => {
+  if (value === '' || value === null || value === undefined) return false;
+  if (value === 'undefined' || value === 'null' || value === 'NaN') return false;
+  return Number.isFinite(Number(value));
+};
+
 function ApplicationForm() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -75,7 +93,9 @@ function ApplicationForm() {
   const [selectedDegreeTypeName, setSelectedDegreeTypeName] = useState('');
 
   const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(passedCourse?.course_id ? String(passedCourse.course_id) : '');
+  const [selectedCourse, setSelectedCourse] = useState(
+    passedCourse?.course_id ? String(passedCourse.course_id) : ''
+  );
   const [selectedCourseName, setSelectedCourseName] = useState(passedCourse?.course_name || '');
   const [selectedDepartment, setSelectedDepartment] = useState(passedCourse?.course_code || '');
 
@@ -408,7 +428,9 @@ function ApplicationForm() {
     loadDegreeTypes();
   }, [selectedCollege, selectedCategory]);
 
-  // Load courses when degree type changes
+  // Load courses when degree type changes.
+  // Uses resolveCourseId() so it works whether the API returns `id` or `course_id`.
+  // Preserves the current selection only if it still exists in the fresh list.
   useEffect(() => {
     const loadCourses = async () => {
       if (!selectedCollege || !selectedCategory || !selectedDegreeType) {
@@ -421,17 +443,16 @@ function ApplicationForm() {
       try {
         const response = await getDegreeCourses(selectedCollege, selectedCategory, selectedDegreeType);
         if (response.success && response.courses) {
-          const uniqueCourses = response.courses.filter((course, index, self) =>
-            index === self.findIndex(c => c.course_id === course.course_id)
-          );
+          const uniqueCourses = response.courses.filter((course, index, self) => {
+            const id = resolveCourseId(course);
+            return id !== null && index === self.findIndex(c => resolveCourseId(c) === id);
+          });
           setCourses(uniqueCourses);
 
-          // Preserve the current selection only if it still exists
-          // in the newly fetched list. Otherwise clear it.
           setSelectedCourse(prev => {
             if (!prev) return prev;
             const stillExists = uniqueCourses.some(
-              c => String(c.course_id) === String(prev)
+              c => String(resolveCourseId(c)) === String(prev)
             );
             return stillExists ? prev : '';
           });
@@ -448,7 +469,7 @@ function ApplicationForm() {
   // Update course details when selected
   useEffect(() => {
     if (selectedCourse && courses.length > 0) {
-      const course = courses.find(c => String(c.course_id) === String(selectedCourse));
+      const course = courses.find(c => String(resolveCourseId(c)) === String(selectedCourse));
       if (course) {
         setSelectedCourseName(course.course_name);
         setSelectedDepartment(course.course_code_display || course.course_code);
@@ -471,7 +492,7 @@ function ApplicationForm() {
   }, [selectedDegreeType, degreeTypes]);
 
   const handleCollegeChange = (e) => {
-    const collegeId = parseInt(e.target.value);
+    const collegeId = parseInt(e.target.value, 10);
     setSelectedCollege(collegeId);
     const college = colleges.find(c => c.college_id === collegeId);
     setCollegeName(college?.college_name || '');
@@ -509,7 +530,6 @@ function ApplicationForm() {
   // Validate all form fields before submission
   const validateForm = () => {
     const errors = {};
-    // All fields except mother_mobile are required
     const requiredFields = [
       'first_name', 'last_name', 'mobile_number', 'date_of_birth', 'email_id',
       'aadhar_number', 'father_name', 'father_mobile', 'mother_name',
@@ -526,13 +546,11 @@ function ApplicationForm() {
       if (error) errors[field] = error;
     });
 
-    // Optional field validation (mother_mobile)
     if (formData.mother_mobile) {
       const error = validateField('mother_mobile', formData.mother_mobile);
       if (error) errors.mother_mobile = error;
     }
 
-    // Address line 2 is optional but validate if provided
     if (formData.address_line2) {
       const error = validateField('address_line2', formData.address_line2);
       if (error) errors.address_line2 = error;
@@ -550,8 +568,7 @@ function ApplicationForm() {
     Object.keys(formData).forEach(field => { allFields[field] = true; });
     setTouched(allFields);
 
-    // Guard against missing course selections first,
-    // so the user sees a clear message instead of the browser popup.
+    // Guard against missing course selections first
     if (!selectedCollege) {
       setError('Please select a college.');
       return;
@@ -564,7 +581,7 @@ function ApplicationForm() {
       setError('Please select a degree type.');
       return;
     }
-    if (!selectedCourse) {
+    if (!isValidCourseValue(selectedCourse)) {
       setError('Please select a course.');
       return;
     }
@@ -700,13 +717,17 @@ function ApplicationForm() {
     };
   }, [showSuccessModal, navigate]);
 
-  const isSelectionComplete = selectedCollege && selectedCategory && selectedDegreeType && selectedCourse;
+  const isSelectionComplete =
+    selectedCollege &&
+    selectedCategory &&
+    selectedDegreeType &&
+    isValidCourseValue(selectedCourse);
 
   const steps = [
     { number: 1, title: 'College', icon: <FaUniversity />, isComplete: !!selectedCollege },
     { number: 2, title: 'Category', icon: <FaBookOpen />, isComplete: !!selectedCategory },
     { number: 3, title: 'Degree', icon: <FaGraduationCap />, isComplete: !!selectedDegreeType },
-    { number: 4, title: 'Course', icon: <FaUserGraduate />, isComplete: !!selectedCourse },
+    { number: 4, title: 'Course', icon: <FaUserGraduate />, isComplete: isValidCourseValue(selectedCourse) },
   ];
 
   // Helper function to render input with validation
@@ -853,11 +874,15 @@ function ApplicationForm() {
                     disabled={!selectedDegreeType || loadingFields.courses}
                   >
                     <option value="">-- Choose Course --</option>
-                    {courses.map((course, index) => (
-                      <option key={`course-${course.id}-${index}`} value={String(course.id)}>
-                        {course.course_name} ({course.course_code})
-                      </option>
-                    ))}
+                    {courses.map((course, index) => {
+                      const cid = resolveCourseId(course);
+                      if (cid === null) return null;
+                      return (
+                        <option key={`course-${cid}-${index}`} value={String(cid)}>
+                          {course.course_name} ({course.course_code})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               </div>
