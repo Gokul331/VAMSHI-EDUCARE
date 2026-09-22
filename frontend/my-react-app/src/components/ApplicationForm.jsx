@@ -422,7 +422,7 @@ function ApplicationForm() {
         const response = await getDegreeCourses(selectedCollege, selectedCategory, selectedDegreeType);
         if (response.success && response.courses) {
           const uniqueCourses = response.courses.filter((course, index, self) =>
-            index === self.findIndex(c => c.id === course.id)
+            index === self.findIndex(c => c.course_id === course.course_id)
           );
           setCourses(uniqueCourses);
 
@@ -431,7 +431,7 @@ function ApplicationForm() {
           setSelectedCourse(prev => {
             if (!prev) return prev;
             const stillExists = uniqueCourses.some(
-              c => String(c.id) === String(prev)
+              c => String(c.course_id) === String(prev)
             );
             return stillExists ? prev : '';
           });
@@ -448,7 +448,7 @@ function ApplicationForm() {
   // Update course details when selected
   useEffect(() => {
     if (selectedCourse && courses.length > 0) {
-      const course = courses.find(c => String(c.id) === String(selectedCourse));
+      const course = courses.find(c => String(c.course_id) === String(selectedCourse));
       if (course) {
         setSelectedCourseName(course.course_name);
         setSelectedDepartment(course.course_code_display || course.course_code);
