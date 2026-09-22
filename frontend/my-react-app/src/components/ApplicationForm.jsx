@@ -75,7 +75,7 @@ function ApplicationForm() {
   const [selectedDegreeTypeName, setSelectedDegreeTypeName] = useState('');
 
   const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(passedCourse?.course_id || '');
+  const [selectedCourse, setSelectedCourse] = useState(passedCourse?.course_id ? String(passedCourse.course_id) : '');
   const [selectedCourseName, setSelectedCourseName] = useState(passedCourse?.course_name || '');
   const [selectedDepartment, setSelectedDepartment] = useState(passedCourse?.course_code || '');
 
@@ -425,6 +425,16 @@ function ApplicationForm() {
             index === self.findIndex(c => c.id === course.id)
           );
           setCourses(uniqueCourses);
+
+          // Preserve the current selection only if it still exists
+          // in the newly fetched list. Otherwise clear it.
+          setSelectedCourse(prev => {
+            if (!prev) return prev;
+            const stillExists = uniqueCourses.some(
+              c => String(c.id) === String(prev)
+            );
+            return stillExists ? prev : '';
+          });
         }
       } catch (err) {
         console.error('Error loading courses:', err);
@@ -438,7 +448,7 @@ function ApplicationForm() {
   // Update course details when selected
   useEffect(() => {
     if (selectedCourse && courses.length > 0) {
-      const course = courses.find(c => c.id === parseInt(selectedCourse));
+      const course = courses.find(c => String(c.id) === String(selectedCourse));
       if (course) {
         setSelectedCourseName(course.course_name);
         setSelectedDepartment(course.course_code_display || course.course_code);
@@ -540,6 +550,25 @@ function ApplicationForm() {
     Object.keys(formData).forEach(field => { allFields[field] = true; });
     setTouched(allFields);
 
+    // Guard against missing course selections first,
+    // so the user sees a clear message instead of the browser popup.
+    if (!selectedCollege) {
+      setError('Please select a college.');
+      return;
+    }
+    if (!selectedCategory) {
+      setError('Please select a category.');
+      return;
+    }
+    if (!selectedDegreeType) {
+      setError('Please select a degree type.');
+      return;
+    }
+    if (!selectedCourse) {
+      setError('Please select a course.');
+      return;
+    }
+
     // Validate form
     if (!validateForm()) {
       setError('Please fix the errors before submitting');
@@ -554,8 +583,18 @@ function ApplicationForm() {
     setLoading(true);
     setError(null);
 
-    if (!selectedCollege || !selectedCategory || !selectedDegreeType || !selectedCourse) {
-      setError('Please complete all course selections');
+    // Numeric guards — prevent NaN / invalid IDs from ever reaching the API.
+    const parsedCollegeId = parseInt(selectedCollege, 10);
+    const parsedCourseId = parseInt(selectedCourse, 10);
+
+    if (Number.isNaN(parsedCollegeId)) {
+      setError('Please select a valid college before submitting');
+      setLoading(false);
+      return;
+    }
+
+    if (Number.isNaN(parsedCourseId)) {
+      setError('Please select a valid course before submitting');
       setLoading(false);
       return;
     }
@@ -577,9 +616,9 @@ function ApplicationForm() {
       pincode: formData.pincode,
       course_name: selectedCourseName,
       department_name: selectedDepartment,
-      college_id: parseInt(selectedCollege),
-      college: parseInt(selectedCollege),
-      selected_course_id: parseInt(selectedCourse),
+      college_id: parsedCollegeId,
+      college: parsedCollegeId,
+      selected_course_id: parsedCourseId,
       selected_category: selectedCategory,
       selected_degree_type: selectedDegreeType,
       gender: formData.gender,
@@ -765,14 +804,14 @@ function ApplicationForm() {
             ))}
           </div>
 
-          <form onSubmit={handleSubmit} className="form-modern">
+          <form onSubmit={handleSubmit} className="form-modern" noValidate>
             {/* Course Selection Section */}
             <div className="card-modern">
               <div className="card-title"><FaGraduationCap /> Course Selection</div>
               <div className="form-grid-2">
                 <div className="input-group">
                   <label>Select College *</label>
-                  <select value={selectedCollege} onChange={handleCollegeChange} required>
+                  <select value={selectedCollege} onChange={handleCollegeChange}>
                     <option value="">-- Choose College --</option>
                     {colleges.map((college, index) => (
                       <option key={`college-${college.college_id}-${index}`} value={college.college_id}>
@@ -784,7 +823,7 @@ function ApplicationForm() {
 
                 <div className="input-group">
                   <label>Select Category *</label>
-                  <select value={selectedCategory} onChange={handleCategoryChange} disabled={!selectedCollege || loadingFields.categories} required>
+                  <select value={selectedCategory} onChange={handleCategoryChange} disabled={!selectedCollege || loadingFields.categories}>
                     <option value="">-- Choose Category --</option>
                     {categories.map((cat, index) => (
                       <option key={`category-${cat.code}-${index}`} value={cat.code}>
@@ -796,7 +835,7 @@ function ApplicationForm() {
 
                 <div className="input-group">
                   <label>Select Degree Type *</label>
-                  <select value={selectedDegreeType} onChange={handleDegreeTypeChange} disabled={!selectedCategory || loadingFields.degreeTypes} required>
+                  <select value={selectedDegreeType} onChange={handleDegreeTypeChange} disabled={!selectedCategory || loadingFields.degreeTypes}>
                     <option value="">-- Choose Degree Type --</option>
                     {degreeTypes.map((deg, index) => (
                       <option key={`degree-${deg.code}-${index}`} value={deg.code}>
@@ -808,10 +847,14 @@ function ApplicationForm() {
 
                 <div className="input-group">
                   <label>Select Course *</label>
-                  <select value={selectedCourse} onChange={handleCourseChange} disabled={!selectedDegreeType || loadingFields.courses} required>
+                  <select
+                    value={selectedCourse}
+                    onChange={handleCourseChange}
+                    disabled={!selectedDegreeType || loadingFields.courses}
+                  >
                     <option value="">-- Choose Course --</option>
                     {courses.map((course, index) => (
-                      <option key={`course-${course.id}-${index}`} value={course.id}>
+                      <option key={`course-${course.id}-${index}`} value={String(course.id)}>
                         {course.course_name} ({course.course_code})
                       </option>
                     ))}
