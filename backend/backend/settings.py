@@ -19,7 +19,7 @@ DEBUG = os.environ.get('DEBUG', 'False').lower() == 'true'
 
 ALLOWED_HOSTS = os.environ.get(
     'ALLOWED_HOSTS',
-    'localhost,127.0.0.1,10.134.88.244,dsuvamshieducare.org,www.dsuvamshieducare.org,.vercel.app'
+    '*,localhost,127.0.0.1,10.121.75.244,dsuvamshieducare.org,www.dsuvamshieducare.org,.vercel.app'
 ).split(',')
 
 CSRF_TRUSTED_ORIGINS = os.environ.get(
